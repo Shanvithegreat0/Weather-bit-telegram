@@ -101,5 +101,5 @@ This project is licensed under the MIT License.
 ---
 
 ## 🚀 Need Help?
-Feel free to open an issue or contact me! 😊
+Feel free to open an issue or contact me! shanvishukla39@gmail.com 😊
 
