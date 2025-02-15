@@ -68,30 +68,6 @@ http://localhost:4000
 2. Set environment variables (`BOT_TOKEN`, `PORT`, etc.).
 3. Deploy & get your bot's **public URL**!
 
-### 🚀 **Deploy on a VPS (DigitalOcean, AWS, Linode)**
-1. Buy a VPS and SSH into it:
-   ```bash
-   ssh root@your-vps-ip
-   ```
-2. Install Node.js & PM2:
-   ```bash
-   sudo apt update && sudo apt install nodejs npm -y
-   npm install -g pm2
-   ```
-3. Clone your project & install dependencies:
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
-   cd YOUR_REPO
-   npm install
-   ```
-4. Start the bot with PM2:
-   ```bash
-   pm2 start dist/main.js --name weather-bot
-   pm2 save
-   pm2 startup
-   ```
-
-Your bot is now running **24/7** 🎉
 
 ---
 
