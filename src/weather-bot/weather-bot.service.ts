@@ -2,62 +2,58 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Telegraf } from 'telegraf';
 import axios from 'axios';
 import * as dotenv from 'dotenv';
-import * as fs from 'fs';
-import * as path from 'path';
-
+import { FirebaseService } from '../services/firebase.service'; // Ensure this path is correct
+import { User } from '../types'; // Import User type from types.ts
 
 dotenv.config();
 
 @Injectable()
+
 export class WeatherBotService implements OnModuleInit {
   public bot: Telegraf;
 
-  constructor() {
+  constructor(private readonly firebaseService: FirebaseService) {
     this.bot = new Telegraf(process.env.BOT_TOKEN || '');
   }
 
   async onModuleInit() {
-    this.bot.start((ctx) => ctx.reply('Welcome! Send me a state name to get the weather forecast.'));
-    
+    this.bot.start((ctx) => {
+      const chatId = ctx.chat.id;
+      const username =
+        'username' in ctx.chat && ctx.chat.username
+          ? ctx.chat.username
+          : 'first_name' in ctx.chat && ctx.chat.first_name
+          ? ctx.chat.first_name
+          : `User_${chatId}`;
+      this.addUser(chatId, username);
+
+      ctx.reply('Welcome! Send me a state name to get the weather forecast.');
+    });
+
     this.bot.command('subscribe', (ctx) => {
       const chatId = ctx.chat.id;
-      let subscribers = this.getSubscribers();
-  
-      if (!subscribers.includes(chatId)) {
-        subscribers.push(chatId);
-        this.saveSubscribers(subscribers);
-        ctx.reply('✅ You have subscribed to daily weather updates!');
-      } else {
-        ctx.reply('📢 You are already subscribed!');
-      }
+      this.subscribeUser(chatId);
+      ctx.reply('✅ You have subscribed to daily weather updates!');
     });
-  
+
     this.bot.command('unsubscribe', (ctx) => {
       const chatId = ctx.chat.id;
-      let subscribers = this.getSubscribers();
-  
-      if (subscribers.includes(chatId)) {
-        subscribers = subscribers.filter(id => id !== chatId);
-        this.saveSubscribers(subscribers);
-        ctx.reply('❌ You have unsubscribed from daily weather updates.');
-      } else {
-        ctx.reply('⚠️ You are not subscribed.');
-      }
+      this.unsubscribeUser(chatId);
+      ctx.reply('❌ You have unsubscribed from daily weather updates.');
     });
-  
+
     this.bot.hears(/.*/, async (ctx) => {
       const state = ctx.message.text;
       const weather = await this.getWeather(state);
       ctx.reply(weather);
     });
 
-  
     await this.bot.launch();
+
     setInterval(async () => {
-        await this.sendDailyUpdates();
-      }, 24 * 60 * 60 * 1000); // 24 hours in milliseconds
+      await this.sendDailyUpdates();
+    }, 24 * 60 * 60 * 1000); // 24 hours
   }
-  
 
   private async getWeather(state: string): Promise<string> {
     try {
@@ -74,34 +70,48 @@ export class WeatherBotService implements OnModuleInit {
       return '⚠️ Could not fetch weather data. Please try again with a valid state name.';
     }
   }
-  private subscribersFile = path.join(__dirname, '../../subscribers.json');
 
-private getSubscribers(): number[] {
-  if (!fs.existsSync(this.subscribersFile)) {
-    return [];
+  private async addUser(userId: number, username: string) {
+    const user: User = {
+      id: userId,
+      name: username,
+      isSubscribed: false,
+    };
+    await this.firebaseService.saveUser(userId.toString(), username, false); // Using userId as string for Firebase
   }
-  const data = fs.readFileSync(this.subscribersFile, 'utf-8');
-  return JSON.parse(data) as number[];
-}
 
-private saveSubscribers(subscribers: number[]) {
-  fs.writeFileSync(this.subscribersFile, JSON.stringify(subscribers, null, 2));
-}
-private async sendDailyUpdates() {
-    const subscribers = this.getSubscribers();
+  private async subscribeUser(userId: number) {
+    const user = await this.firebaseService.getUser(userId.toString()); // Firebase returns a User object
+    if (user) {
+      await this.firebaseService.updateSubscription(userId.toString(), true);
+    }
+  }
+
+  private async unsubscribeUser(userId: number) {
+    const user = await this.firebaseService.getUser(userId.toString()); // Firebase returns a User object
+    if (user) {
+      await this.firebaseService.updateSubscription(userId.toString(), false);
+    }
+  }
+
+  private async sendDailyUpdates() {
+    const users = await this.firebaseService.getAllUsers(); // Get users from Firebase
+    const subscribers = Object.values(users).filter((user) => user.isSubscribed); // Filter out subscribed users
+
     if (subscribers.length === 0) return;
-  
+
     const defaultState = process.env.DEFAULT_STATE || 'Lucknow';
     const weather = await this.getWeather(defaultState);
-  
-    for (const chatId of subscribers) {
+
+    for (const user of subscribers) {
       try {
-        await this.bot.telegram.sendMessage(chatId, `🌅 Daily Weather Update for ${defaultState}:\n${weather}`);
+        await this.bot.telegram.sendMessage(
+          user.id,
+          `🌅 Daily Weather Update for ${defaultState}:\n${weather}`
+        );
       } catch (error) {
-        console.error(`Failed to send message to ${chatId}`, error);
+        console.error(`Failed to send message to ${user.id}`, error);
       }
     }
   }
-  
-
 }
